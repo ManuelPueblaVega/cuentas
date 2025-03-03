@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>💸 Gestión de Gastos Diarios</title>
+  <!-- Tailwind CSS desde CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Se agregan transiciones suaves */
+    body { transition: background-color 0.3s, color 0.3s; }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <!-- Encabezado con título y botón de ajustes -->
+  <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
+    <h1 class="text-2xl font-bold">💸 Gestión de Gastos Diarios</h1>
+    <button id="openSettings" class="bg-blue-500 hover:bg-blue-400 p-2 rounded">⚙️ Ajustes</button>
+  </header>
+
+  <main class="p-4">
+    <!-- Sección de filtros -->
+    <section id="filters" class="mb-4">
+      <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+        <input type="text" id="searchInput" placeholder="Buscar por descripción o categoría..." class="border p-2 rounded flex-1">
+        <input type="date" id="filterDate" class="border p-2 rounded">
+        <button id="clearFilters" class="bg-gray-500 hover:bg-gray-400 text-white p-2 rounded">Limpiar Filtros</button>
+      </div>
+    </section>
+
+    <!-- Formulario para agregar gastos -->
+    <section id="expenseFormSection" class="bg-white p-4 rounded shadow mb-4">
+      <h2 class="text-xl font-semibold mb-4">➕ Agregar Nuevo Gasto</h2>
+      <form id="expense-form" class="space-y-4">
+        <div>
+          <label class="block text-gray-700">Descripción 💬</label>
+          <input type="text" id="description" class="w-full border border-gray-300 p-2 rounded" placeholder="Ej. Almuerzo, Taxi">
+          <p id="descError" class="text-red-500 text-sm hidden">La descripción es requerida.</p>
+        </div>
+        <div>
+          <label class="block text-gray-700">Monto 💰</label>
+          <input type="number" id="amount" class="w-full border border-gray-300 p-2 rounded" placeholder="Ej. 15.50" step="0.01">
+          <p id="amountError" class="text-red-500 text-sm hidden">Ingresa un monto positivo.</p>
+        </div>
+        <div>
+          <label class="block text-gray-700">Categoría (opcional) 🏷️</label>
+          <input type="text" id="category" class="w-full border border-gray-300 p-2 rounded" placeholder="Ej. Comida, Transporte">
+        </div>
+        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded">
+          ➕ Agregar
+        </button>
+      </form>
+    </section>
+
+    <!-- Lista de gastos -->
+    <section id="expensesSection" class="bg-white p-4 rounded shadow mb-4">
+      <h2 class="text-xl font-semibold mb-4">📋 Lista de Gastos</h2>
+      <!-- Placeholder cuando no hay gastos -->
+      <div id="placeholder" class="text-center text-gray-500 py-10">
+        <p class="text-lg">😃 ¡No hay gastos registrados! Comienza a agregar tus gastos para llevar un control.</p>
+      </div>
+      <!-- Tabla con los gastos -->
+      <div id="expense-table-container" class="overflow-x-auto hidden">
+        <table class="min-w-full">
+          <thead>
+            <tr class="bg-gray-200">
+              <th class="px-4 py-2 border">Fecha</th>
+              <th class="px-4 py-2 border">Día</th>
+              <th class="px-4 py-2 border">Hora</th>
+              <th class="px-4 py-2 border">Descripción</th>
+              <th class="px-4 py-2 border">Categoría</th>
+              <th class="px-4 py-2 border">Monto 💰</th>
+              <th class="px-4 py-2 border">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="expense-table-body">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Totales y gráfico -->
+    <section class="bg-white p-4 rounded shadow mb-4">
+      <h2 class="text-xl font-semibold mb-4">📊 Totales y Estadísticas</h2>
+      <div class="flex flex-col sm:flex-row sm:justify-around mb-4">
+        <div class="text-center mb-4 sm:mb-0">
+          <p class="text-gray-700">Total de la semana:</p>
+          <p id="total-week" class="text-2xl font-bold">0</p>
+        </div>
+        <div class="text-center">
+          <p class="text-gray-700">Total del mes:</p>
+          <p id="total-month" class="text-2xl font-bold">0</p>
+        </div>
+      </div>
+      <canvas id="expensesChart" class="w-full" style="max-height:300px;"></canvas>
+    </section>
+
+    <!-- Botones de respaldo, sincronización y reinicio -->
+    <section class="bg-white p-4 rounded shadow mb-4 flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
+      <button id="download-csv" class="bg-green-500 hover:bg-green-600 text-white p-2 rounded">
+        📥 Descargar CSV
+      </button>
+      <button id="download-json" class="bg-purple-500 hover:bg-purple-600 text-white p-2 rounded">
+        📥 Descargar JSON
+      </button>
+      <button id="syncData" class="bg-indigo-500 hover:bg-indigo-600 text-white p-2 rounded">
+        🔄 Sincronizar (Backup)
+      </button>
+      <button id="resetData" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded">
+        🗑️ Reiniciar Datos
+      </button>
+    </section>
+  </main>
+
+  <!-- Modal para editar gasto -->
+  <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded shadow-lg p-6 w-11/12 sm:w-1/2">
+      <h2 class="text-xl font-semibold mb-4">Editar Gasto</h2>
+      <form id="editExpenseForm" class="space-y-4">
+        <div>
+          <label class="block text-gray-700">Descripción 💬</label>
+          <input type="text" id="editDescription" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div>
+          <label class="block text-gray-700">Monto 💰</label>
+          <input type="number" id="editAmount" class="w-full border border-gray-300 p-2 rounded" step="0.01">
+        </div>
+        <div>
+          <label class="block text-gray-700">Categoría (opcional) 🏷️</label>
+          <input type="text" id="editCategory" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="flex justify-end space-x-4">
+          <button type="button" id="cancelEdit" class="bg-gray-500 hover:bg-gray-400 text-white p-2 rounded">Cancelar</button>
+          <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal de confirmación de eliminación -->
+  <div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded shadow-lg p-6 w-11/12 sm:w-1/3">
+      <h2 class="text-xl font-semibold mb-4">Confirmar Eliminación</h2>
+      <p class="mb-4">¿Estás seguro de eliminar este gasto?</p>
+      <div class="flex justify-end space-x-4">
+        <button id="cancelDelete" class="bg-gray-500 hover:bg-gray-400 text-white p-2 rounded">Cancelar</button>
+        <button id="confirmDelete" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de ajustes (tema y categorías personalizadas) -->
+  <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded shadow-lg p-6 w-11/12 sm:w-1/2">
+      <h2 class="text-xl font-semibold mb-4">⚙️ Ajustes</h2>
+      <div class="mb-4">
+        <label class="block text-gray-700 mb-2">Tema</label>
+        <select id="themeSelect" class="w-full border border-gray-300 p-2 rounded">
+          <option value="light">Claro</option>
+          <option value="dark">Oscuro</option>
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="block text-gray-700 mb-2">Categorías Personalizadas (separadas por comas)</label>
+        <input type="text" id="customCategories" class="w-full border border-gray-300 p-2 rounded" placeholder="Ej. Comida, Transporte, Ocio">
+      </div>
+      <div class="flex justify-end space-x-4">
+        <button id="closeSettings" class="bg-gray-500 hover:bg-gray-400 text-white p-2 rounded">Cerrar</button>
+        <button id="saveSettings" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Código JavaScript modular -->
+  <script type="module">
+    // Variables globales y configuración inicial
+    let expenses = [];
+    let editingIndex = -1;
+    let deleteIndex = -1;
+    let customCategories = [];
+
+    // Inicializar gráfico con Chart.js
+    let chart;
+    const ctx = document.getElementById('expensesChart').getContext('2d');
+    function initChart() {
+      if(chart) chart.destroy();
+      const labels = getWeekLabels();
+      const data = getWeeklyTotals();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Gastos Semanales',
+            data,
+            fill: false,
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+    function getWeekLabels() {
+      return ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    }
+    function getWeeklyTotals() {
+      const totals = Array(7).fill(0);
+      const now = new Date();
+      // Calcular el lunes de la semana actual
+      const diffToMonday = now.getDay() === 0 ? 6 : now.getDay() - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      monday.setHours(0,0,0,0);
+      expenses.forEach(expense => {
+        const expDate = new Date(expense.timestamp);
+        const dayIndex = (expDate.getDay() + 6) % 7;
+        if(expDate >= monday) totals[dayIndex] += expense.amount;
+      });
+      return totals;
+    }
+
+    // Cargar y guardar datos en LocalStorage
+    function loadExpenses() {
+      const data = localStorage.getItem('expenses');
+      expenses = data ? JSON.parse(data) : [];
+    }
+    function saveExpenses() {
+      localStorage.setItem('expenses', JSON.stringify(expenses));
+    }
+
+    // Actualizar tabla, totales y gráfico
+    function updateExpenseTable() {
+      const tableBody = document.getElementById('expense-table-body');
+      tableBody.innerHTML = '';
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const filterDate = document.getElementById('filterDate').value;
+      // Filtrar gastos según búsqueda y fecha
+      const filteredExpenses = expenses.filter(expense => {
+        const matchesSearch = expense.description.toLowerCase().includes(searchTerm) ||
+                              (expense.category && expense.category.toLowerCase().includes(searchTerm));
+        const matchesDate = filterDate ? expense.date === new Date(filterDate).toLocaleDateString() : true;
+        return matchesSearch && matchesDate;
+      });
+      if(filteredExpenses.length === 0) {
+        document.getElementById('expense-table-container').classList.add('hidden');
+        document.getElementById('placeholder').classList.remove('hidden');
+      } else {
+        document.getElementById('expense-table-container').classList.remove('hidden');
+        document.getElementById('placeholder').classList.add('hidden');
+        filteredExpenses.forEach((expense, index) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-4 py-2 border">${expense.date}</td>
+            <td class="px-4 py-2 border">${expense.day}</td>
+            <td class="px-4 py-2 border">${expense.time}</td>
+            <td class="px-4 py-2 border">${expense.description}</td>
+            <td class="px-4 py-2 border">${expense.category || '-'}</td>
+            <td class="px-4 py-2 border">${expense.amount.toFixed(2)}</td>
+            <td class="px-4 py-2 border flex space-x-2 justify-center">
+              <button onclick="openEditModal(${index})" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-sm">✏️ Editar</button>
+              <button onclick="openDeleteModal(${index})" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-sm">🗑️ Eliminar</button>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      }
+      updateTotals();
+      initChart();
+    }
+    function updateTotals() {
+      const now = new Date();
+      let weekTotal = 0, monthTotal = 0;
+      const diffToMonday = now.getDay() === 0 ? 6 : now.getDay() - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      monday.setHours(0,0,0,0);
+      expenses.forEach(expense => {
+        const expDate = new Date(expense.timestamp);
+        if(expDate >= monday) weekTotal += expense.amount;
+        if(expDate.getMonth() === now.getMonth() && expDate.getFullYear() === now.getFullYear())
+          monthTotal += expense.amount;
+      });
+      document.getElementById('total-week').textContent = weekTotal.toFixed(2);
+      document.getElementById('total-month').textContent = monthTotal.toFixed(2);
+    }
+
+    // Agregar o actualizar gasto (con validación)
+    function addOrUpdateExpense(e) {
+      e.preventDefault();
+      const descriptionInput = document.getElementById('description');
+      const amountInput = document.getElementById('amount');
+      const categoryInput = document.getElementById('category');
+      const descError = document.getElementById('descError');
+      const amountError = document.getElementById('amountError');
+      let valid = true;
+      const description = descriptionInput.value.trim();
+      const amount = parseFloat(amountInput.value);
+      const category = categoryInput.value.trim();
+      if(!description) { descError.classList.remove('hidden'); valid = false; } else { descError.classList.add('hidden'); }
+      if(isNaN(amount) || amount <= 0) { amountError.classList.remove('hidden'); valid = false; } else { amountError.classList.add('hidden'); }
+      if(!valid) return;
+      const now = new Date();
+      const expenseData = {
+        description,
+        amount,
+        category,
+        date: now.toLocaleDateString(),
+        day: now.toLocaleDateString('es-ES', { weekday: 'long' }),
+        time: now.toLocaleTimeString(),
+        timestamp: now.getTime()
+      };
+      if(editingIndex === -1) {
+        expenses.push(expenseData);
+      } else {
+        expenses[editingIndex] = expenseData;
+        editingIndex = -1;
+        document.querySelector('#expense-form button[type="submit"]').textContent = '➕ Agregar';
+      }
+      saveExpenses();
+      updateExpenseTable();
+      descriptionInput.value = '';
+      amountInput.value = '';
+      categoryInput.value = '';
+    }
+
+    // Filtros
+    function applyFilters() { updateExpenseTable(); }
+    function clearFilters() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('filterDate').value = '';
+      updateExpenseTable();
+    }
+
+    // Funciones para modales de edición y eliminación
+    window.openEditModal = function(filteredIndex) {
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const filterDate = document.getElementById('filterDate').value;
+      const filteredIndices = expenses.map((_, i) => i).filter(i => {
+        const exp = expenses[i];
+        const matchesSearch = exp.description.toLowerCase().includes(searchTerm) ||
+                              (exp.category && exp.category.toLowerCase().includes(searchTerm));
+        const matchesDate = filterDate ? exp.date === new Date(filterDate).toLocaleDateString() : true;
+        return matchesSearch && matchesDate;
+      });
+      editingIndex = filteredIndices[filteredIndex];
+      const expense = expenses[editingIndex];
+      document.getElementById('editDescription').value = expense.description;
+      document.getElementById('editAmount').value = expense.amount;
+      document.getElementById('editCategory').value = expense.category;
+      document.getElementById('editModal').classList.remove('hidden');
+    };
+    document.getElementById('editExpenseForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const description = document.getElementById('editDescription').value.trim();
+      const amount = parseFloat(document.getElementById('editAmount').value);
+      const category = document.getElementById('editCategory').value.trim();
+      if(!description || isNaN(amount) || amount <= 0) {
+        alert('Por favor, ingresa datos válidos.');
+        return;
+      }
+      const now = new Date();
+      const expenseData = {
+        description,
+        amount,
+        category,
+        date: now.toLocaleDateString(),
+        day: now.toLocaleDateString('es-ES', { weekday: 'long' }),
+        time: now.toLocaleTimeString(),
+        timestamp: now.getTime()
+      };
+      expenses[editingIndex] = expenseData;
+      saveExpenses();
+      updateExpenseTable();
+      document.getElementById('editModal').classList.add('hidden');
+    });
+    window.openDeleteModal = function(filteredIndex) {
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const filterDate = document.getElementById('filterDate').value;
+      const filteredIndices = expenses.map((_, i) => i).filter(i => {
+        const exp = expenses[i];
+        const matchesSearch = exp.description.toLowerCase().includes(searchTerm) ||
+                              (exp.category && exp.category.toLowerCase().includes(searchTerm));
+        const matchesDate = filterDate ? exp.date === new Date(filterDate).toLocaleDateString() : true;
+        return matchesSearch && matchesDate;
+      });
+      deleteIndex = filteredIndices[filteredIndex];
+      document.getElementById('deleteModal').classList.remove('hidden');
+    };
+    document.getElementById('confirmDelete').addEventListener('click', function() {
+      if(deleteIndex > -1) {
+        expenses.splice(deleteIndex, 1);
+        saveExpenses();
+        updateExpenseTable();
+        deleteIndex = -1;
+        document.getElementById('deleteModal').classList.add('hidden');
+      }
+    });
+    document.getElementById('cancelDelete').addEventListener('click', function() {
+      deleteIndex = -1;
+      document.getElementById('deleteModal').classList.add('hidden');
+    });
+
+    // Asignar eventos a formularios y filtros
+    document.getElementById('expense-form').addEventListener('submit', addOrUpdateExpense);
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+    document.getElementById('filterDate').addEventListener('change', applyFilters);
+    document.getElementById('clearFilters').addEventListener('click', clearFilters);
+
+    // Funciones de descarga y sincronización
+    function downloadCSV() {
+      if(expenses.length === 0) { alert('No hay gastos para descargar.'); return; }
+      let csvContent = "data:text/csv;charset=utf-8,Fecha,Día,Hora,Descripción,Categoría,Monto\n";
+      expenses.forEach(expense => {
+        csvContent += `${expense.date},${expense.day},${expense.time},${expense.description},${expense.category || '-'},${expense.amount.toFixed(2)}\n`;
+      });
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "gastos.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    function downloadJSON() {
+      if(expenses.length === 0) { alert('No hay gastos para descargar.'); return; }
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(expenses, null, 2));
+      const link = document.createElement("a");
+      link.setAttribute("href", dataStr);
+      link.setAttribute("download", "gastos.json");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    document.getElementById('download-csv').addEventListener('click', downloadCSV);
+    document.getElementById('download-json').addEventListener('click', downloadJSON);
+    document.getElementById('syncData').addEventListener('click', function() {
+      alert('Funcionalidad de sincronización no implementada. Utiliza la opción de descarga para respaldar tus datos.');
+    });
+    document.getElementById('resetData').addEventListener('click', function() {
+      if(confirm('¿Estás seguro de reiniciar todos los datos? Esta acción no se puede deshacer.')) {
+        expenses = [];
+        saveExpenses();
+        updateExpenseTable();
+      }
+    });
+
+    // Manejo de ajustes (tema y categorías personalizadas)
+    document.getElementById('openSettings').addEventListener('click', function() {
+      document.getElementById('settingsModal').classList.remove('hidden');
+    });
+    document.getElementById('closeSettings').addEventListener('click', function() {
+      document.getElementById('settingsModal').classList.add('hidden');
+    });
+    document.getElementById('saveSettings').addEventListener('click', function() {
+      const theme = document.getElementById('themeSelect').value;
+      applyTheme(theme);
+      const customCat = document.getElementById('customCategories').value.trim();
+      customCategories = customCat ? customCat.split(',').map(c => c.trim()) : [];
+      alert('Ajustes guardados.');
+      document.getElementById('settingsModal').classList.add('hidden');
+    });
+    function applyTheme(theme) {
+      if(theme === 'dark') {
+        document.body.classList.remove('bg-gray-100');
+        document.body.classList.add('bg-gray-900', 'text-white');
+      } else {
+        document.body.classList.remove('bg-gray-900', 'text-white');
+        document.body.classList.add('bg-gray-100');
+      }
+    }
+
+    // Inicialización
+    loadExpenses();
+    updateExpenseTable();
+  </script>
+</body>
+</html>
